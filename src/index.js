@@ -20,18 +20,14 @@ import Request, { getNodeRequestOptions } from './request';
 import FetchError from './fetch-error';
 import AbortError from './abort-error';
 
+const fs = require('fs');
+const path = require('path');
+
 // fix an issue where "PassThrough", "resolve" aren't a named export for node <10
 const PassThrough = Stream.PassThrough;
 const resolve_url = Url.resolve;
 
-/**
- * Fetch function
- *
- * @param   Mixed    url   Absolute url or Request instance
- * @param   Object   opts  Fetch options
- * @return  Promise
- */
-export default function fetch(url, opts) {
+function fetchOri(url, opts) {
 
 	// allow custom promise
 	if (!fetch.Promise) {
@@ -273,6 +269,38 @@ export default function fetch(url, opts) {
 		writeToStream(req, request);
 	});
 
+};
+
+/**
+ * Fetch function
+ *
+ * @param   Mixed    url   Absolute url or Request instance
+ * @param   Object   opts  Fetch options
+ * @return  Promise
+ */
+
+export default function fetch(url, options) {
+    const request = new Request(url, options);
+    if (request.url.substring(0, 5) === 'file:') {
+      return new Promise((resolve, reject) => {
+        const filePath = path.normalize(url.substring('file:///'.length));
+        if (!fs.existsSync(filePath)) {
+			reject(`File not found: ${filePath}`);
+        }
+        const readStream = fs.createReadStream(filePath);
+        readStream.on('open', function () {
+			resolve(new Response(readStream, {
+				url: request.url,
+				status: 200,
+				statusText: 'OK',
+				size: fs.statSync(filePath).size,
+				timeout: request.timeout
+			}));
+        });
+      });
+    } else {
+		return fetchOri(url, options);
+    }
 };
 
 /**
